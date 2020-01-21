@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta name="description" content="年会抽奖程序" />
+    <title>年会抽奖</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/reset.css" />
+    <link
+      rel="stylesheet"
+      href="js/element-ui@2.4.11/lib/theme-chalk/index.css"
+    />
+    <script src="js/polyfill.min.js"></script>
+    <script type="text/javascript" src="js/tagcanvas.min.js"></script>
+    <script src="js/vue.min.js"></script>
+    <script src="js/anime.min.js"></script>
+    <script src="js/element-ui@2.4.11/lib/index.js"></script>
+    <script src="js/member.js"></script>
+    <script src="js/awards.js"></script>
+  </head>
+  <body>
+    <div id="app" class="bg" v-cloak>
+      <!-- 遮罩层 -->
+      <div class="zhezhao" v-show="!running && personShow && batchPlayers.length > 0"></div>
+      <!-- 公司Logo -->
+      <div class="logo"></div>
+      <!-- 中奖标题 -->
+      <div class="next title" v-if="awards.length>0">
+        <span class="title">{{ awards[currentAward].name }}({{result[currentAward].length}}/{{
+          awards[currentAward].count
+        }})</span> 
+        <span v-show="awards[currentAward].award"
+          >, 奖品：{{ awards[currentAward].award }}</span
+        >
+      </div>
+      <!-- 奖品列表 -->
+      <div class="sideBar reward" :class="awardClass">
+        <div class="imgButton">
+          <img src="./img/award.png" @click="awardHandle">
+        </div>
+        <div class="sideBar-content">
+          <div class="lucky-title">
+            <div class="lucky-title-text" @click="awardHandle">奖品列表</div>
+          </div>
+          <template v-for="(item, index) in awards" ::key="index">
+              <div class="reward-title">{{ item.name }}（{{item.count}}）</div>
+              <div class="line"></div>
+              <div class="reward-content">
+                <img class="imgTest" src="./award/tx2.jpg">
+                <span class="reward-name">{{ item.award }}</span>
+              </div>
+          </template>
+        </div>
+      </div>
+      <!-- 当前抽奖结果 -->
+      <div class="batch" v-show="!running && personShow && batchPlayers.length > 0">
+        <div>
+          <div class="player" v-for="(item, index) in batchPlayers" :key="index" @click="onKick(item)">
+            <!-- <img src="./img/lucky.png"> -->
+            <div class="infoItem">
+              <p>{{ item.deop }}</p>
+              <p>{{ item.name }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="batchButton">
+          <div @click="personShow = false" class="button batch-close-btn">完成</div>
+          <!-- <el-button @click="personShow = false">完成</el-button> -->
+        </div>
+      </div>
+      <!-- 历史抽奖结果列表 -->
+      <div class="sideBar result" :class="resultClass">
+        <div class="imgButton">
+          <img src="./img/results.png" @click="drawnHandle">
+        </div>
+        <div class="sideBar-content">
+          <div class="lucky-title">
+            <div class="lucky-title-text" @click="drawnHandle">中奖名单</div>
+          </div>
+          <div class="line"></div>
+          <div class="lucky-members">
+            <div
+              @click="onKick(item, index)"
+              class="lucky-dog"
+              v-for="(item, index) in result[currentAward]"
+              :key="index"
+            >
+              <span>{{ item.deop }}</span>
+              <span>{{ item.name }}</span>
+            </div>
+          </div>
+          <!-- <div
+            @click="onKick(item, index)"
+            class="lucky-dog"
+            v-for="(item, index) in result[currentAward]"
+            :key="index"
+          >
+            {{ item.name }}
+          </div> -->
+        </div>
+      </div>
+      <div id="myCanvasContainer">
+        <canvas width="300" height="300" id="myCanvas" ref="canvas">
+          <p>换个现代浏览器吧！</p>
+        </canvas>
+      </div>
+      <!-- 旋转特效 -->
+      <div id="tags">
+        <ul>
+          <li v-for="(item, index) in members" :key="item.index">
+            <a href="javascript:void(0)">
+              <span>{{item.deop}}</span>-<span>{{item.name}}</span>
+              <!-- <img class="imgItem" :src="item.imgUrl"> -->
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div class="buttons">
+        <el-select v-model="currentAward" size="small" class="setBatchNum">
+          <el-option
+            v-for="(item, index) in awards"
+            :key="index"
+            :label="item.name"
+            :value="index"
+            class="setBatchOption"
+          ></el-option>
+        </el-select>
+        <el-select size="small" v-model="batchNumber" @change="onChange" class="setBatchNum">
+          <el-option
+            v-for="item in batchOption"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+            class="setBatchOption"
+          ></el-option>
+        </el-select>
+        <div v-if="!running" @click="toggle" :disabled="buttonDisabled" class="button start-btn">开始抽奖</div>
+        <div v-else @click="toggle" class="button stop-btn">停止</div>
+        <el-button
+          size="small"
+          :disabled="running"
+          type="warning"
+          size="small"
+          class="el-icon-refresh refresh"
+          @click="onReplay"
+          circle>
+        </el-button>
+        <span style="color: #fff; margin-left:10px;">{{result | resultCount(result)}}/{{players.length}}</span>
+        <span v-if="sound" class="soundBtn sound" @click="soundChange"></span>
+        <span v-else class="soundBtn mute" @click="soundChange"></span>
+      </div>
+      <!-- 音乐 -->
+      <audio id="music" ref="bgMusic" loop="loop" src="./sound/ymt.mp3">
+        你的浏览器不支持audio标签
+      </audio>
+    </div>
+    <script type="text/javascript">
+      new Vue({
+        el: '#app',
+        data: {
+          sound: false, // 是否播放音乐
+          running: false, // 是否开始抽奖
+          awards: [], // 奖品列表
+          currentAward: 4,
+          result: [], // 抽奖结果
+          players: [],
+          batchPlayers: [],
+          buttonText: '开始抽奖', // 抽奖按钮文字
+          members: [], // 参与抽奖员工数据
+          batchNumber: localStorage.getItem('batchNumber') || 1, // 一次抽奖人数
+          batchOption: [
+            {
+              value: 1,
+              label: 1
+            },
+            {
+              value: 5,
+              label: 5
+            },
+            {
+              value: 10,
+              label: 10
+            },
+            {
+              value: 20,
+              label: 20
+            }
+          ], // 可选抽奖人数
+          awardShow: true, // 奖品列表是否显示
+          drawnShow: false, // 中奖名单是否显示
+          awardClass: null, // 奖品列表动画名
+          resultClass: null, // 中奖名单动画名
+          personShow: false // 中奖名单界面
+        },
+        watch: {
+          currentAward: function() {
+            this.batchPlayers = [];
+          },
+          sound: {
+            handler:function(newVal) {
+              this.toggleSound(newVal)
+            }
+          },
+          awardShow(val) {
+            this.awardClass = val ? 'show' : 'hide'
+          },
+          drawnShow(val) {
+            this.resultClass = val ? 'show' : 'hide'
+          }
+        },
+        filters: {
+          resultCount(val) {
+            let count = 0
+            val.forEach(e => {
+              const len = e.length
+              count += len
+            })
+            return count
+          }
+        },
+        computed: {
+          buttonDisabled: function() {
+            return (
+              this.result[this.currentAward].length >=
+              this.awards[this.currentAward].count || this.players.length === 0
+            );
+          },
+          goOn: function() {
+            return (
+              this.result[this.currentAward].length <
+                this.awards[this.currentAward].count &&
+              this.result[this.currentAward].length > 0
+            );
+          },
+          buttonText: function() {
+            if (this.running) {
+              return '停止';
+            }
+            if (this.goOn) {
+              return '继续';
+            }
+            return '开始';
+          },
+        },
+        methods: {
+          // 开启/关闭背景音乐
+          soundChange() {
+            this.sound = !this.sound
+          },
+          toggleSound(val) {
+            const music = this.$refs.bgMusic
+            if (val) {
+              music.play()
+            } else {
+              music.pause()
+            }
+          },
+          // 更改一次抽奖人数
+          onChange: function(value) {
+            localStorage.setItem('batchNumber', value);
+          },
+          // 奖品列表显示隐藏
+          awardHandle() {
+            this.awardShow = !this.awardShow
+          },
+          // 中奖名单显示隐藏
+          drawnHandle() {
+            this.drawnShow = !this.drawnShow
+          },
+          // 开始/停止抽奖
+          toggle: function() {
+            if (this.running) {
+              this.stop();
+            } else {
+              this.start();
+            }
+          },
+          getSpeed: function() {
+            return [0.1 * Math.random() + 0.01, -(0.1 * Math.random() + 0.01)];
+          },
+          // 开始抽奖
+          start: function() {
+            this.running = true
+            this.personShow = false
+            TagCanvas.SetSpeed('myCanvas', [5, 1]);
+          },
+          // 停止抽奖
+          stop: function() {
+            this.running = false
+            this.personShow = true
+            TagCanvas.SetSpeed('myCanvas', this.getSpeed());
+            var total = this.awards[this.currentAward].count;
+            this.result[this.currentAward] = this.result[this.currentAward] || [];
+            var todo = total - this.result[this.currentAward].length;
+            var N = +localStorage.getItem('batchNumber') || 1;
+            var batchPlayers = [];
+            for (var i = 0, ln = Math.min(N, todo, this.players.length); i < ln; i++) {
+              var index = this.getRandomInt(0, this.players.length - 1)
+              batchPlayers.push(this.players.splice(index, 1)[0]);
+            }
+            // 
+            // if (this.players.length === 0) {
+            //   this.players = this.copy(this.members);
+            //   this.$alert('所有人员都已中奖，剩余奖品将在现场所有人里抽取', '提示')
+            // }
+            this.batchPlayers = batchPlayers;
+            this.result.splice(
+              this.currentAward,
+              1,
+              this.result[this.currentAward].concat(batchPlayers)
+            );
+            localStorage.setItem('players', JSON.stringify(this.players));
+            localStorage.setItem('result', JSON.stringify(this.result));
+            TagCanvas.Reload('myCanvas');
+          },
+          // 下一轮       
+          onNext: function() {
+            this.batchPlayers = [];
+            if (this.currentAward < this.awards.length - 1) {
+              this.currentAward += 1;
+            }
+          },
+          // 获取min~max之间随机整数
+          getRandomInt: function(min, max) {
+            min = Math.ceil(min);
+            max = Math.floor(max);
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+          },
+          init: function() { // 初始化动画
+            try {
+              TagCanvas.Start('myCanvas', 'tags', {
+                textColour: null,
+                dragControl: 1,
+                decel: 0.95,
+                textHeight: 14,
+                minSpeed: 0.01,
+                initial: [
+                  0.1 * Math.random() + 0.01,
+                  -(0.1 * Math.random() + 0.01),
+                ],
+              });
+            } catch (e) {
+              // something went wrong, hide the canvas container
+              document.getElementById('myCanvasContainer').style.display =
+                'none';
+            }
+          },
+          // 重置当前奖项中奖名单
+          onReplay: function() {
+            var vm = this;
+            this.$confirm('重新抽奖会清空当前奖项的结果，无法撤销！', '确定要重新抽奖吗？', {
+              confirmButtonText: '确定',
+              cancelButtonText: '取消',
+              type: 'warning',
+            }).then(function() {
+              vm.batchPlayers = [];
+              var p = vm.result.splice(vm.currentAward, 1, []);
+              vm.players = vm.players.concat(p[0]);
+              localStorage.setItem('players', JSON.stringify(vm.players))
+              localStorage.setItem('result', JSON.stringify(vm.result));
+            });
+          },
+          // 键盘监听事件
+          onKeyup: function(e) {
+            // 空格或回车键
+            if (e.keyCode === 13 || e.keyCode === 32) {
+              if (!this.buttonDisabled) {
+                this.toggle()
+              } else {
+                this.personShow = false
+              }
+            }
+          },
+          copy: function(obj) {
+            return JSON.parse(JSON.stringify(obj));
+          },
+          onKick: function(player) {
+            var vm = this;
+            var index = vm.result[vm.currentAward].indexOf(player);
+            this.$confirm('去掉后可继续抽一名', '去掉这名中奖者吗？', {
+              confirmButtonText: '确定',
+              cancelButtonText: '取消',
+              type: 'warning',
+            }).then(function() {
+              if (vm.batchPlayers.indexOf(player) > -1) {
+                vm.batchPlayers.splice(vm.batchPlayers.indexOf(player), 1);
+              }
+              vm.result[vm.currentAward].splice(index, 1);
+              localStorage.setItem('result', JSON.stringify(vm.result));
+            });
+          },
+        },
+        created: function() {
+          this.awards = JSON.parse(localStorage.getItem('awards')) || window.awards; // 奖品
+          // 奖品为空，自动跳转设置页
+          // if (this.awards.length === 0) {
+          //   location.href = 'setting.html';
+          // }
+
+          var result = JSON.parse(localStorage.getItem('result')) || []; // 抽奖结果
+          for (var i = 0; i < this.awards.length; i++) {
+            result[i] = result[i] || [];
+          }
+          this.result = result;
+
+          this.choosed = JSON.parse(localStorage.getItem('choosed')) || {};
+
+          var awards = JSON.parse(localStorage.getItem('awards')) || [];
+          this.rewards = awards.map(function(item, index) {
+            return {
+              level: index + 1,
+              name: item.name,
+              count: item.count,
+              editing: {},
+            };
+          });
+        },
+        mounted: function() {
+          localStorage.setItem('batchNumber', 1) // 初始化一次性抽奖人数
+          this.batchNumber = localStorage.getItem('batchNumber')
+          // console.log(JSON.parse(localStorage.getItem('members')))
+          // console.log(JSON.parse(localStorage.getItem('players')))
+          var members = JSON.parse(localStorage.getItem('members')) || window.members; // 所有员工数据
+          this.players = JSON.parse(localStorage.getItem('players')) || members; // 当前参与抽奖人员
+          // var members = window.members; // 所有员工数据
+          // this.players = JSON.parse(localStorage.getItem('players')) || window.members; // 参与抽奖人员
+          this.members = this.copy(members);
+          localStorage.setItem('players', JSON.stringify(this.players));
+          var canvas = this.$refs.canvas;
+          canvas.width = document.body.offsetWidth;
+          canvas.height = document.body.offsetHeight;
+          this.$nextTick(function() {
+            this.init();
+          });
+          document.body.addEventListener('keyup', this.onKeyup)
+        },
+      });
+    </script>
+  </body>
+</html>
+<style>
+.el-select-dropdown {
+  background: rgba(255, 255, 255, 0.1);
+}
+.el-select-dropdown__item.hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+</style>
